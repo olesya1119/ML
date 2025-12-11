@@ -1,15 +1,10 @@
-import json
-import time
-from pathlib import Path
 import requests
-import pandas as pd
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 API_VERSION = "5.199"
 VK_TOKEN = os.getenv("VK_TOKEN")
-
 
 def fetch_posts_for_group(domain: str, count: int = 100, offset: int = 0):
     '''
@@ -45,8 +40,6 @@ def fetch_posts_for_group(domain: str, count: int = 100, offset: int = 0):
         result["post_id"].append(i["id"])
         result["text"].append(i.get("text", ""))
 
-    
-    print(result)
     return result
 
-fetch_posts_for_group("poterjashkansk", count=100, offset=0)
+fetch_posts_for_group("poterjashkansk", count=100, offset=100)
