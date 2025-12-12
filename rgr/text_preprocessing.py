@@ -12,41 +12,47 @@ MODEL_NAME = "xlm-roberta-base"
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 
-def clean_text(text: str) -> str:
+import re
+
+EMOJI_PATTERN = re.compile(r"[\U0001F300-\U0001FAFF\u2600-\u26FF\u2700-\u27BF]+")
+
+
+def clean_text(text):
     """
-    Базовая очистка текста:
-    - приведение к нижнему регистру
-    - удаление ссылок, хэштегов, упоминаний вида [id123|Имя]
-    - удаление лишних символов
+    Очистка текста:
     """
-    if not isinstance(text, str):
-        return ""
+    # Нормализуем пробелы/неразрывные пробелы
+    text = text.replace("\xa0", " ").strip()
 
-    text = text.lower()
-
-    # ссылки
-    text = re.sub(r"http\S+|www\S+", " ", text)
-
-    # упоминания вида [id123|Имя]
+    # Убираем VK-упоминания вида [id123|Имя Фамилия]
     text = re.sub(r"\[id\d+\|[^\]]+\]", " ", text)
 
-    # хэштеги
+    # Удаляем ссылки
+    text = re.sub(r"http\S+|www\.\S+", " ", text)
+
+    # Удаляем телефоны: +7 913 480-31-60, 8(913)123-45-67, 89131234567 и т.п.
+    text = re.sub(r"\+?\d[\d\-\s\(\)]{7,}\d", " ", text)
+
+    # Удаляем хештеги целиком (#потеряшканск)
     text = re.sub(r"#\S+", " ", text)
 
-    # всё, что не буквы/пробелы
-    text = re.sub(r"[^а-яёa-z\s]", " ", text)
+    # Удаляем эмодзи
+    text = EMOJI_PATTERN.sub(" ", text)
 
-    # лишние пробелы
+    # Приводим к нижнему регистру
+    text = text.lower()
+
+    # Оставляем буквы, цифры и базовую пунктуацию; всё остальное выкидываем
+    text = re.sub(r"[^a-zа-яё0-9\.\,\!\?\s]", " ", text)
+
+    # Схлопываем пробелы
     text = re.sub(r"\s+", " ", text).strip()
 
     return text
 
 
-def tokenize_with_transformer(
-    text: str,
-    max_length: int = 128,
-    add_special_tokens: bool = True,
-) -> Dict[str, Any]:
+
+def tokenize_with_transformer(text):
     """
     Токенизация одной строки текста с помощью токенизатора Transformers.
     Возвращает словарь с:
@@ -60,8 +66,7 @@ def tokenize_with_transformer(
         text,
         padding="max_length",
         truncation=True,
-        max_length=max_length,
-        add_special_tokens=add_special_tokens,
+        add_special_tokens=True,
         return_tensors=None,
     )
 
@@ -76,29 +81,17 @@ def tokenize_with_transformer(
     }
 
 
-def add_transformer_tokens_column(
-    df: pd.DataFrame,
-    text_column: str = "text",
-    max_length: int = 128,
-    new_column: str = "transformer_tokens",
-) -> pd.DataFrame:
+def read_csv_and_create_tokens_dataframe(filename):
     """
-    Добавляет в DataFrame колонку с токенами Transformers.
-
-    :param df: исходный DataFrame
-    :param text_column: колонка с текстом (например, 'text' из VK)
-    :param max_length: максимальная длина последовательности
-    :param new_column: имя новой колонки для токенов
-    :return: копия DataFrame с добавленной колонкой
+    Создает DataFrame с токенами Transformers из прочитанного csv-файла.
     """
-    df = df.copy()
+    df = pd.read_csv(filename)
 
     def _tokenize_row(text: str):
-        res = tokenize_with_transformer(text, max_length=max_length)
-        # Можно сохранять только токены, чтобы удобнее смотреть
+        res = tokenize_with_transformer(text)
         return res["tokens"]
 
-    df[new_column] = df[text_column].fillna("").apply(_tokenize_row)
+    df["transformer_tokens"] = df["text"].fillna("").apply(_tokenize_row)
     return df
 
 
@@ -109,3 +102,5 @@ if __name__ == "__main__":
     print("Очищенный текст:", clean_text(example_text))
     print("Токены:", res["tokens"])
     print("input_ids (первые 10):", res["input_ids"][:10])
+
+    print(read_csv_and_create_tokens_dataframe("rgr/data/vk_posts_raw.csv"))
